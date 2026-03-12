@@ -25,7 +25,7 @@ import {
 } from "./repository.js";
 import type { Store, StructuredSubSearch } from "./repository.js";
 import { getCollection, getGlobalContext, getDefaultCollectionNames } from "./catalogs.js";
-import { disposeDefaultLlamaCpp } from "./inference.js";
+import { disposeDefaultLLM } from "./inference.js";
 
 // =============================================================================
 // Types for structured content
@@ -51,6 +51,7 @@ type StatusResult = {
     documents: number;
     lastUpdated: string;
   }[];
+  watchDaemon?: "active" | "inactive";
 };
 
 // =============================================================================
@@ -508,12 +509,41 @@ Intent-aware lex (C++ performance, not sports):
     async () => {
       const status: StatusResult = store.getStatus();
 
+      let watchDaemon: "active" | "inactive" = "inactive";
+      try {
+        const { resolve } = await import("path");
+        const { homedir } = await import("os");
+        const { readFileSync, existsSync, unlinkSync } = await import("fs");
+        const cacheDir = process.env.XDG_CACHE_HOME
+          ? resolve(process.env.XDG_CACHE_HOME, "kindx")
+          : resolve(homedir(), ".cache", "kindx");
+        const watchPidPath = resolve(cacheDir, "watch.pid");
+        if (existsSync(watchPidPath)) {
+          const watchPid = parseInt(readFileSync(watchPidPath, "utf-8").trim());
+          process.kill(watchPid, 0);
+          watchDaemon = "active";
+        }
+      } catch (err) {
+        try {
+          const { resolve } = await import("path");
+          const { homedir } = await import("os");
+          const { unlinkSync } = await import("fs");
+          const cacheDir = process.env.XDG_CACHE_HOME
+            ? resolve(process.env.XDG_CACHE_HOME, "kindx")
+            : resolve(homedir(), ".cache", "kindx");
+          unlinkSync(resolve(cacheDir, "watch.pid"));
+        } catch (e) {}
+      }
+
+      const fullStatus = { ...status, watchDaemon };
+
       const summary = [
         `KINDX Index Status:`,
         `  Total documents: ${status.totalDocuments}`,
         `  Needs embedding: ${status.needsEmbedding}`,
         `  Vector index: ${status.hasVectorIndex ? 'yes' : 'no'}`,
         `  Collections: ${status.collections.length}`,
+        `  Watch Daemon: ${watchDaemon === "active" ? "active" : "inactive"}`,
       ];
 
       for (const col of status.collections) {
@@ -522,7 +552,7 @@ Intent-aware lex (C++ performance, not sports):
 
       return {
         content: [{ type: "text", text: summary.join('\n') }],
-        structuredContent: status,
+        structuredContent: fullStatus,
       };
     }
   );
@@ -534,8 +564,8 @@ Intent-aware lex (C++ performance, not sports):
 // Transport: stdio (default)
 // =============================================================================
 
-export async function startMcpServer(): Promise<void> {
-  const store = createStore();
+export async function startMcpServer(dbPath?: string): Promise<void> {
+  const store = createStore(dbPath);
   const server = createMcpServer(store);
   const transport = new StdioServerTransport();
   await server.connect(transport);
@@ -555,8 +585,11 @@ export type HttpServerHandle = {
  * Start MCP server over Streamable HTTP (JSON responses, no SSE).
  * Binds to localhost only. Returns a handle for shutdown and port discovery.
  */
-export async function startMcpHttpServer(port: number, options?: { quiet?: boolean }): Promise<HttpServerHandle> {
-  const store = createStore();
+export async function startMcpHttpServer(port: number, options?: { quiet?: boolean; dbPath?: string }): Promise<HttpServerHandle> {
+  const store = createStore(options?.dbPath);
+
+  // Read token once at startup. Undefined / empty = auth disabled (single-user local mode).
+  const mcpToken = process.env.KINDX_MCP_TOKEN?.trim() || null;
 
   // Session map: each client gets its own McpServer + Transport pair (MCP spec requirement).
   // The store is shared — it's stateless SQLite, safe for concurrent access.
@@ -631,6 +664,19 @@ export async function startMcpHttpServer(port: number, options?: { quiet?: boole
         nodeRes.end(body);
         log(`${ts()} GET /health (${Date.now() - reqStart}ms)`);
         return;
+      }
+
+      // Bearer token authentication — enforced when KINDX_MCP_TOKEN env var is set.
+      // /health is intentionally exempt to allow monitoring probes without credentials.
+      // Set KINDX_MCP_TOKEN before starting the daemon in any shared or networked deployment.
+      if (mcpToken) {
+        const authHeader = nodeReq.headers["authorization"];
+        if (!authHeader || authHeader !== `Bearer ${mcpToken}`) {
+          nodeRes.writeHead(401, { "Content-Type": "application/json" });
+          nodeRes.end(JSON.stringify({ error: "Unauthorized: set Authorization: Bearer <KINDX_MCP_TOKEN>" }));
+          log(`${ts()} 401 Unauthorized ${nodeReq.method} ${pathname}`);
+          return;
+        }
       }
 
       // REST endpoint: POST /search — structured search without MCP protocol
@@ -795,7 +841,7 @@ export async function startMcpHttpServer(port: number, options?: { quiet?: boole
     sessions.clear();
     httpServer.close();
     store.close();
-    await disposeDefaultLlamaCpp();
+    await disposeDefaultLLM();
   };
 
   process.on("SIGTERM", async () => {

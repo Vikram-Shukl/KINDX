@@ -1,10 +1,10 @@
 {
   "name": "@ambicuity/kindx",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "KINDX - On-device hybrid search engine for markdown documents with BM25, vector embeddings, and LLM reranking",
   "type": "module",
   "bin": {
-    "kindx": "dist/kindx.js"
+    "kindx": "bin/kindx"
   },
   "files": [
     "dist/",
@@ -38,20 +38,21 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.1",
-    "better-sqlite3": "^11.0.0",
+    "better-sqlite3": "^12.4.5",
+    "chokidar": "^3.6.0",
     "fast-glob": "^3.3.0",
     "node-llama-cpp": "^3.17.1",
     "picomatch": "^4.0.0",
-    "sqlite-vec": "^0.1.7-alpha.2",
+    "sqlite-vec": "0.1.7-alpha.2",
     "yaml": "^2.8.2",
     "zod": "^4.2.1"
   },
   "optionalDependencies": {
-    "sqlite-vec-darwin-arm64": "^0.1.7-alpha.2",
-    "sqlite-vec-darwin-x64": "^0.1.7-alpha.2",
-    "sqlite-vec-linux-arm64": "^0.1.7-alpha.2",
-    "sqlite-vec-linux-x64": "^0.1.7-alpha.2",
-    "sqlite-vec-windows-x64": "^0.1.7-alpha.2"
+    "sqlite-vec-darwin-arm64": "0.1.7-alpha.2",
+    "sqlite-vec-darwin-x64": "0.1.7-alpha.2",
+    "sqlite-vec-linux-arm64": "0.1.7-alpha.2",
+    "sqlite-vec-linux-x64": "0.1.7-alpha.2",
+    "sqlite-vec-windows-x64": "0.1.7-alpha.2"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.0",

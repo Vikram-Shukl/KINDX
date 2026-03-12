@@ -15,10 +15,11 @@ import { openDatabase, loadSqliteVec } from "./runtime.js";
 import type { Database } from "./runtime.js";
 import picomatch from "picomatch";
 import { createHash } from "crypto";
+import { dirname, resolve as pathResolve, relative } from "path";
 import { realpathSync, statSync, mkdirSync } from "node:fs";
 import {
-  LlamaCpp,
-  getDefaultLlamaCpp,
+  LLM,
+  getDefaultLLM,
   formatQueryForEmbedding,
   formatDocForEmbedding,
   type RerankDocument,
@@ -45,7 +46,7 @@ import {
 
 const HOME = process.env.HOME || "/tmp";
 export const DEFAULT_EMBED_MODEL = "embeddinggemma";
-export const DEFAULT_RERANK_MODEL = "ExpedientFalcon/qwen3-reranker:0.6b-q8_0";
+export const DEFAULT_RERANK_MODEL = "ExpedientFalcon/qwen3-reranker:0.6b-Q8_0";
 export const DEFAULT_QUERY_MODEL = "Qwen/Qwen3-1.7B";
 export const DEFAULT_GLOB = "**/*.md";
 export const DEFAULT_MULTI_GET_MAX_BYTES = 10 * 1024; // 10KB
@@ -835,6 +836,10 @@ export type Store = {
   getHashesForEmbedding: () => { hash: string; body: string; path: string }[];
   clearAllEmbeddings: () => void;
   insertEmbedding: (hash: string, seq: number, pos: number, embedding: Float32Array, model: string, embeddedAt: string) => void;
+
+  // Watcher integrations
+  indexSingleFile: (collectionName: string, relativePath: string, absolutePath: string) => Promise<"embedded" | "unchanged" | "failed">;
+  unlinkSingleFile: (collectionName: string, relativePath: string) => Promise<boolean>;
 };
 
 /**
@@ -894,6 +899,10 @@ export function createStore(dbPath?: string): Store {
     // Query expansion & reranking
     expandQuery: (query: string, model?: string) => expandQuery(query, model, db),
     rerank: (query: string, documents: { file: string; text: string }[], model?: string) => rerank(query, documents, model, db),
+
+    // Watcher integrations
+    indexSingleFile: (collectionName: string, relativePath: string, absolutePath: string) => indexSingleFile(db, collectionName, relativePath, absolutePath),
+    unlinkSingleFile: (collectionName: string, relativePath: string) => unlinkSingleFile(db, collectionName, relativePath),
 
     // Document retrieval
     findDocument: (filename: string, options?: { includeBody?: boolean }) => findDocument(db, filename, options),
@@ -1475,7 +1484,7 @@ export async function chunkDocumentByTokens(
   overlapTokens: number = CHUNK_OVERLAP_TOKENS,
   windowTokens: number = CHUNK_WINDOW_TOKENS
 ): Promise<{ text: string; pos: number; tokens: number }[]> {
-  const llm = getDefaultLlamaCpp();
+  const llm = getDefaultLLM();
 
   // Use moderate chars/token estimate (prose ~4, code ~2, mixed ~3)
   // If chunks exceed limit, they'll be re-split with actual ratio
@@ -1491,24 +1500,35 @@ export async function chunkDocumentByTokens(
   const results: { text: string; pos: number; tokens: number }[] = [];
 
   for (const chunk of charChunks) {
-    const tokens = await llm.tokenize(chunk.text);
+    let tokensLength: number;
+    if (llm.tokenize) {
+      tokensLength = (await llm.tokenize(chunk.text)).length;
+    } else {
+      tokensLength = Math.ceil(chunk.text.length / 3.5);
+    }
 
-    if (tokens.length <= maxTokens) {
-      results.push({ text: chunk.text, pos: chunk.pos, tokens: tokens.length });
+    if (tokensLength <= maxTokens) {
+      results.push({ text: chunk.text, pos: chunk.pos, tokens: tokensLength });
     } else {
       // Chunk is still too large - split it further
       // Use actual token count to estimate better char limit
-      const actualCharsPerToken = chunk.text.length / tokens.length;
+      const actualCharsPerToken = chunk.text.length / tokensLength;
       const safeMaxChars = Math.floor(maxTokens * actualCharsPerToken * 0.95); // 5% safety margin
 
       const subChunks = chunkDocument(chunk.text, safeMaxChars, Math.floor(overlapChars * actualCharsPerToken / 2), Math.floor(windowChars * actualCharsPerToken / 2));
 
       for (const subChunk of subChunks) {
-        const subTokens = await llm.tokenize(subChunk.text);
+        let subTokensLength: number;
+        if (llm.tokenize) {
+          subTokensLength = (await llm.tokenize(subChunk.text)).length;
+        } else {
+          subTokensLength = Math.ceil(subChunk.text.length / 3.5);
+        }
+        
         results.push({
           text: subChunk.text,
           pos: chunk.pos + subChunk.pos,
-          tokens: subTokens.length,
+          tokens: subTokensLength,
         });
       }
     }
@@ -1625,13 +1645,39 @@ export function matchFilesByGlob(db: Database, pattern: string): { filepath: str
   `).all() as { virtual_path: string; body_length: number; path: string; collection: string }[];
 
   const isMatch = picomatch(pattern);
-  return allFiles
-    .filter(f => isMatch(f.virtual_path) || isMatch(f.path))
-    .map(f => ({
-      filepath: f.virtual_path,  // Virtual path for precise lookup
-      displayPath: f.path,        // Relative path for display
-      bodyLength: f.body_length
-    }));
+  const cwd = process.cwd();
+
+  const results: { filepath: string; displayPath: string; bodyLength: number }[] = [];
+
+  for (const f of allFiles) {
+    // 1. Check against virtual path or generic database path
+    if (isMatch(f.virtual_path) || isMatch(f.path)) {
+      results.push({
+        filepath: f.virtual_path,
+        displayPath: f.path,
+        bodyLength: f.body_length
+      });
+      continue;
+    }
+
+    // 2. Check against the real filesystem layout
+    const coll = getCollectionByName(db, f.collection);
+    // If the path evaluates to the actual workspace via relative evaluation
+    if (coll) {
+      const physicalPath = pathResolve(coll.pwd, f.path);
+      const relativePathToCwd = relative(cwd, physicalPath);
+      
+      if (isMatch(physicalPath) || isMatch(relativePathToCwd) || (relativePathToCwd.startsWith('..') === false && isMatch(`./${relativePathToCwd}`))) {
+         results.push({
+            filepath: f.virtual_path,
+            displayPath: f.path,
+            bodyLength: f.body_length
+          });
+      }
+    }
+  }
+
+  return results;
 }
 
 // =============================================================================
@@ -2295,7 +2341,7 @@ async function getEmbedding(text: string, model: string, isQuery: boolean, sessi
   const formattedText = isQuery ? formatQueryForEmbedding(text, model) : formatDocForEmbedding(text, undefined, model);
   const result = session
     ? await session.embed(formattedText, { model, isQuery })
-    : await getDefaultLlamaCpp().embed(formattedText, { model, isQuery });
+    : await getDefaultLLM().embed(formattedText, { model, isQuery });
   return result?.embedding || null;
 }
 
@@ -2360,8 +2406,8 @@ export async function expandQuery(query: string, model: string = DEFAULT_QUERY_M
     }
   }
 
-  const llm = getDefaultLlamaCpp();
-  // Note: LlamaCpp uses hardcoded model, model parameter is ignored
+  const llm = getDefaultLLM();
+  // Note: LLM usages rely on configuration logic internally
   const results = await llm.expandQuery(query);
 
   // Map Queryable[] → ExpandedQuery[] (same shape, decoupled from inference.ts internals).
@@ -2403,7 +2449,7 @@ export async function rerank(query: string, documents: { file: string; text: str
 
   // Rerank uncached documents using LlamaCpp
   if (uncachedDocsByChunk.size > 0) {
-    const llm = getDefaultLlamaCpp();
+    const llm = getDefaultLLM();
     const uncachedDocs = [...uncachedDocsByChunk.values()];
     const rerankResult = await llm.rerank(query, uncachedDocs, { model });
 
@@ -2617,6 +2663,20 @@ export function findDocument(db: Database, filename: string, options: { includeB
       WHERE 'kindx://' || d.collection || '/' || d.path LIKE ? AND d.active = 1
       LIMIT 1
     `).get(`%${filepath}`) as DbDocRow | null;
+  }
+
+  // Try to match by absolute path or relative to CWD
+  if (!doc && !filepath.startsWith('kindx://')) {
+    const absolutePath = pathResolve(process.cwd(), filepath);
+    const virtualP = toVirtualPath(db, absolutePath);
+    if (virtualP) {
+       doc = db.prepare(`
+        SELECT ${selectCols}
+        FROM documents d
+        JOIN content ON content.hash = d.hash
+        WHERE 'kindx://' || d.collection || '/' || d.path = ? AND d.active = 1
+      `).get(virtualP) as DbDocRow | null;
+    }
   }
 
   // Try to match by absolute path (requires looking up collection paths from YAML)
@@ -3117,11 +3177,19 @@ export async function hybridQuery(
     }
 
     // Batch embed all vector queries in a single call
-    const llm = getDefaultLlamaCpp();
+    const llm = getDefaultLLM();
     const textsToEmbed = vecQueries.map(q => formatQueryForEmbedding(q.text));
     hooks?.onEmbedStart?.(textsToEmbed.length);
     const embedStart = Date.now();
-    const embeddings = await llm.embedBatch(textsToEmbed);
+    let embeddings: Awaited<ReturnType<typeof llm.embedBatch>>;
+    try {
+      embeddings = await llm.embedBatch(textsToEmbed);
+    } catch (err) {
+      process.stderr.write(
+        `KINDX Warning: embedBatch failed during hybridQuery, falling back to FTS-only results. ${err}\n`
+      );
+      embeddings = textsToEmbed.map(() => null);
+    }
     hooks?.onEmbedDone?.(Date.now() - embedStart);
 
     // Run sqlite-vec lookups with pre-computed embeddings
@@ -3198,7 +3266,10 @@ export async function hybridQuery(
     if (rrfRank <= 3) rrfWeight = 0.75;
     else if (rrfRank <= 10) rrfWeight = 0.60;
     else rrfWeight = 0.40;
-    const rrfScore = 1 / rrfRank;
+    
+    // Replace severe 1/rank penalty with a softer exponential decay.
+    // Rank 1 = 1.0, Rank 2 = 0.83, Rank 3 = 0.69, Rank 4 = 0.57 ...
+    const rrfScore = Math.max(0.01, Math.exp(-(rrfRank - 1) / 5.5));
     const blendedScore = rrfWeight * rrfScore + (1 - rrfWeight) * r.score;
 
     const candidate = candidateMap.get(r.file);
@@ -3440,11 +3511,19 @@ export async function structuredSearch(
         s.type === 'vec' || s.type === 'hyde'
     );
     if (vecSearches.length > 0) {
-      const llm = getDefaultLlamaCpp();
+      const llm = getDefaultLLM();
       const textsToEmbed = vecSearches.map(s => formatQueryForEmbedding(s.query));
       hooks?.onEmbedStart?.(textsToEmbed.length);
       const embedStart = Date.now();
-      const embeddings = await llm.embedBatch(textsToEmbed);
+      let embeddings: Awaited<ReturnType<typeof llm.embedBatch>>;
+      try {
+        embeddings = await llm.embedBatch(textsToEmbed);
+      } catch (err) {
+        process.stderr.write(
+          `KINDX Warning: embedBatch failed during structuredSearch, falling back to FTS-only results. ${err}\n`
+        );
+        embeddings = vecSearches.map(() => null);
+      }
       hooks?.onEmbedDone?.(Date.now() - embedStart);
 
       for (let i = 0; i < vecSearches.length; i++) {
@@ -3529,7 +3608,10 @@ export async function structuredSearch(
     if (rrfRank <= 3) rrfWeight = 0.75;
     else if (rrfRank <= 10) rrfWeight = 0.60;
     else rrfWeight = 0.40;
-    const rrfScore = 1 / rrfRank;
+    
+    // Replace severe 1/rank penalty with a softer exponential decay.
+    // Rank 1 = 1.0, Rank 2 = 0.83, Rank 3 = 0.69, Rank 4 = 0.57 ...
+    const rrfScore = Math.max(0.01, Math.exp(-(rrfRank - 1) / 5.5));
     const blendedScore = rrfWeight * rrfScore + (1 - rrfWeight) * r.score;
 
     const candidate = candidateMap.get(r.file);
@@ -3578,4 +3660,67 @@ export async function structuredSearch(
     })
     .filter(r => r.score >= minScore)
     .slice(0, limit);
+}
+
+// =============================================================================
+// Watcher Integrations
+// =============================================================================
+
+async function indexSingleFile(
+  db: Database,
+  collectionName: string,
+  relativePath: string,
+  absolutePath: string
+): Promise<"embedded" | "unchanged" | "failed"> {
+  try {
+    const { readFileSync, statSync } = await import("fs");
+    const { createHash } = await import("crypto");
+    
+    // Read file and hash
+    const content = readFileSync(absolutePath, "utf-8");
+    const stat = statSync(absolutePath);
+    const hash = createHash("sha256").update(content).digest("hex");
+    
+    // Check if unchanged
+    const activeDoc = findActiveDocument(db, collectionName, relativePath);
+    if (activeDoc && activeDoc.hash === hash) {
+      return "unchanged";
+    }
+    
+    const now = new Date().toISOString();
+    const modifiedAt = stat.mtime.toISOString();
+    
+    db.exec("BEGIN TRANSACTION");
+    try {
+      insertContent(db, hash, content, now);
+      if (activeDoc) {
+        // Delete old vectors if hash changed
+        db.prepare(`DELETE FROM content_vectors WHERE hash = ?`).run(activeDoc.hash);
+        updateDocument(db, activeDoc.id, relativePath, hash, modifiedAt); 
+      } else {
+        insertDocument(db, collectionName, relativePath, relativePath, hash, now, modifiedAt);
+      }
+      db.exec("COMMIT");
+      return "embedded"; // Properly enqueued for BM25 and embedding 
+    } catch (e) {
+      db.exec("ROLLBACK");
+      throw e;
+    }
+  } catch (err) {
+    console.error(`Failed to index ${relativePath}:`, err);
+    return "failed";
+  }
+}
+
+async function unlinkSingleFile(
+  db: Database,
+  collectionName: string,
+  relativePath: string
+): Promise<boolean> {
+  try {
+    deactivateDocument(db, collectionName, relativePath);
+    return true;
+  } catch (err) {
+    return false;
+  }
 }

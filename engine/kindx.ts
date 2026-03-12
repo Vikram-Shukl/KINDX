@@ -61,6 +61,7 @@ import {
   vectorSearchQuery,
   structuredSearch,
   addLineNumbers,
+  findDocument,
   type ExpandedQuery,
   type HybridQueryExplain,
   type StructuredSubSearch,
@@ -71,7 +72,7 @@ import {
   createStore,
   getDefaultDbPath,
 } from "./repository.js";
-import { disposeDefaultLlamaCpp, getDefaultLlamaCpp, withLLMSession, pullModels, DEFAULT_EMBED_MODEL_URI, DEFAULT_GENERATE_MODEL_URI, DEFAULT_RERANK_MODEL_URI, DEFAULT_MODEL_CACHE_DIR } from "./inference.js";
+import { disposeDefaultLLM, getDefaultLLM, withLLMSession, pullModels, DEFAULT_EMBED_MODEL_URI, DEFAULT_GENERATE_MODEL_URI, DEFAULT_RERANK_MODEL_URI, DEFAULT_MODEL_CACHE_DIR } from "./inference.js";
 import {
   formatSearchResults,
   formatDocuments,
@@ -315,6 +316,18 @@ async function showStatus(): Promise<void> {
       // Stale PID file cleaned up silently
     }
   }
+
+  // Watch daemon status
+  const watchPidPath = resolve(mcpCacheDir, "watch.pid");
+  if (existsSync(watchPidPath)) {
+    const watchPid = parseInt(readFileSync(watchPidPath, "utf-8").trim());
+    try {
+      process.kill(watchPid, 0);
+      console.log(`Watch: ${c.green}running${c.reset} (PID ${watchPid})`);
+    } catch {
+      unlinkSync(watchPidPath);
+    }
+  }
   console.log("");
 
   console.log(`${c.bold}Documents${c.reset}`);
@@ -399,30 +412,35 @@ async function showStatus(): Promise<void> {
 
   // Device / GPU info
   try {
-    const llm = getDefaultLlamaCpp();
-    const device = await llm.getDeviceInfo();
-    console.log(`\n${c.bold}Device${c.reset}`);
-    if (device.gpu) {
-      console.log(`  GPU:      ${c.green}${device.gpu}${c.reset} (offloading: ${device.gpuOffloading ? 'yes' : 'no'})`);
-      if (device.gpuDevices.length > 0) {
-        // Deduplicate and count GPUs
-        const counts = new Map<string, number>();
-        for (const name of device.gpuDevices) {
-          counts.set(name, (counts.get(name) || 0) + 1);
+    const llm = getDefaultLLM();
+    if (typeof llm.getDeviceInfo === "function") {
+      const device = await llm.getDeviceInfo();
+      console.log(`\n${c.bold}Device${c.reset}`);
+      if (device.gpu) {
+        console.log(`  GPU:      ${c.green}${device.gpu}${c.reset} (offloading: ${device.gpuOffloading ? 'yes' : 'no'})`);
+        if (device.gpuDevices.length > 0) {
+          // Deduplicate and count GPUs
+          const counts = new Map<string, number>();
+          for (const name of device.gpuDevices) {
+            counts.set(name, (counts.get(name) || 0) + 1);
+          }
+          const deviceStr = Array.from(counts.entries())
+            .map(([name, count]) => count > 1 ? `${count}× ${name}` : name)
+            .join(', ');
+          console.log(`  Devices:  ${deviceStr}`);
         }
-        const deviceStr = Array.from(counts.entries())
-          .map(([name, count]) => count > 1 ? `${count}× ${name}` : name)
-          .join(', ');
-        console.log(`  Devices:  ${deviceStr}`);
+        if (device.vram) {
+          console.log(`  VRAM:     ${formatBytes(device.vram.free)} free / ${formatBytes(device.vram.total)} total`);
+        }
+      } else {
+        console.log(`  GPU:      ${c.yellow}none${c.reset} (running on CPU — models will be slow)`);
+        console.log(`  ${c.dim}Tip: Install CUDA, Vulkan, or Metal support for GPU acceleration.${c.reset}`);
       }
-      if (device.vram) {
-        console.log(`  VRAM:     ${formatBytes(device.vram.free)} free / ${formatBytes(device.vram.total)} total`);
-      }
+      console.log(`  CPU:      ${device.cpuCores} math cores`);
     } else {
-      console.log(`  GPU:      ${c.yellow}none${c.reset} (running on CPU — models will be slow)`);
-      console.log(`  ${c.dim}Tip: Install CUDA, Vulkan, or Metal support for GPU acceleration.${c.reset}`);
+      console.log(`\n${c.bold}Device${c.reset}`);
+      console.log(`  Accelerator: ${c.cyan}Remote API${c.reset} (API backend)`);
     }
-    console.log(`  CPU:      ${device.cpuCores} math cores`);
   } catch {
     // Don't fail status if LLM init fails
   }
@@ -929,65 +947,18 @@ function multiGet(pattern: string, maxLines?: number, maxBytes: number = DEFAULT
   let files: { filepath: string; displayPath: string; bodyLength: number; collection?: string; path?: string }[];
 
   if (isCommaSeparated) {
-    // Comma-separated list of files (can be virtual paths or relative paths)
+    // Comma-separated list of files (can be virtual paths, local paths, or #docids)
     const names = pattern.split(',').map(s => s.trim()).filter(Boolean);
     files = [];
     for (const name of names) {
-      let doc: { virtual_path: string; body_length: number; collection: string; path: string } | null = null;
-
-      // Handle virtual paths
-      if (isVirtualPath(name)) {
-        const parsed = parseVirtualPath(name);
-        if (parsed) {
-          // Try exact match on collection + path
-          doc = db.prepare(`
-            SELECT
-              'kindx://' || d.collection || '/' || d.path as virtual_path,
-              LENGTH(content.doc) as body_length,
-              d.collection,
-              d.path
-            FROM documents d
-            JOIN content ON content.hash = d.hash
-            WHERE d.collection = ? AND d.path = ? AND d.active = 1
-          `).get(parsed.collectionName, parsed.path) as typeof doc;
-        }
-      } else {
-        // Try exact match on path
-        doc = db.prepare(`
-          SELECT
-            'kindx://' || d.collection || '/' || d.path as virtual_path,
-            LENGTH(content.doc) as body_length,
-            d.collection,
-            d.path
-          FROM documents d
-          JOIN content ON content.hash = d.hash
-          WHERE d.path = ? AND d.active = 1
-          LIMIT 1
-        `).get(name) as { virtual_path: string; body_length: number; collection: string; path: string } | null;
-
-        // Try suffix match
-        if (!doc) {
-          doc = db.prepare(`
-            SELECT
-              'kindx://' || d.collection || '/' || d.path as virtual_path,
-              LENGTH(content.doc) as body_length,
-              d.collection,
-              d.path
-            FROM documents d
-            JOIN content ON content.hash = d.hash
-            WHERE d.path LIKE ? AND d.active = 1
-            LIMIT 1
-          `).get(`%${name}`) as { virtual_path: string; body_length: number; collection: string; path: string } | null;
-        }
-      }
-
-      if (doc) {
+      const found = findDocument(db, name, { includeBody: false });
+      if (!("error" in found)) {
         files.push({
-          filepath: doc.virtual_path,
-          displayPath: doc.virtual_path,
-          bodyLength: doc.body_length,
-          collection: doc.collection,
-          path: doc.path
+          filepath: found.filepath,
+          displayPath: found.displayPath,
+          bodyLength: found.bodyLength,
+          collection: found.collectionName,
+          path: found.filepath.replace(`kindx://${found.collectionName}/`, '')
         });
       } else {
         console.error(`File not found: ${name}`);
@@ -2434,6 +2405,31 @@ function showSkill(): void {
   process.stdout.write(content.endsWith("\n") ? content : content + "\n");
 }
 
+function installSkill(): void {
+  const argv1 = process.argv[1];
+  const actualScriptPath = argv1 ? realpathSync(argv1) : fileURLToPath(import.meta.url);
+  const scriptDir = dirname(actualScriptPath);
+  const relativePath = pathJoin("capabilities", "kindx", "SKILL.md");
+  const skillPath = pathJoin(scriptDir, "..", relativePath);
+
+  if (!existsSync(skillPath)) {
+    console.error("SKILL.md not found. If you built from source, ensure capabilities/kindx/SKILL.md exists.");
+    process.exit(1);
+  }
+
+  const content = readFileSync(skillPath, "utf-8");
+  const home = process.env.MOCK_HOMEDIR || homedir();
+  const claudeCommandsDir = pathJoin(home, ".claude", "commands");
+  
+  if (!existsSync(claudeCommandsDir)) {
+    mkdirSync(claudeCommandsDir, { recursive: true });
+  }
+
+  const destPath = pathJoin(claudeCommandsDir, "kindx.md");
+  writeFileSync(destPath, content, "utf-8");
+  console.log(`✓ KINDX skill successfully installed to ${destPath}`);
+}
+
 function showHelp(): void {
   console.log("kindx -- Knowledge INDexer");
   console.log("");
@@ -2448,6 +2444,7 @@ function showHelp(): void {
   console.log("  kindx get <file>[:line] [-l N]  - Show a single document, optional line slice");
   console.log("  kindx multi-get <pattern>       - Batch fetch via glob or comma-separated list");
   console.log("  kindx mcp                       - Start the MCP server (stdio transport for AI agents)");
+  console.log("  kindx skill install             - Copy the KINDX skill to ~/.claude/commands/ for one-command setup");
   console.log("");
   console.log("Collections & context:");
   console.log("  kindx collection add/list/remove/rename/show   - Manage indexed folders");
@@ -2456,6 +2453,9 @@ function showHelp(): void {
   console.log("");
   console.log("Maintenance:");
   console.log("  kindx status                    - View index + collection health");
+  console.log("  kindx watch [collections...]    - Real-time incremental indexing daemon");
+  console.log("  kindx migrate chroma <path>     - Migrate a ChromaDB sqlite file to KINDX");
+  console.log("  kindx migrate openclaw <path>   - Migrate an OpenCLAW repository to use KINDX");
   console.log("  kindx update [--pull]           - Re-index collections (optionally git pull first)");
   console.log("  kindx embed [-f]                - Generate/refresh vector embeddings");
   console.log("  kindx cleanup                   - Clear caches, vacuum DB");
@@ -2812,6 +2812,97 @@ if (isMain) {
       await showStatus();
       break;
 
+    case "migrate": {
+      const target = cli.args[0];
+      const dbPath = cli.args[1];
+      if (!target || !dbPath) {
+        console.error("Usage: kindx migrate <chroma|openclaw> <path>");
+        process.exit(1);
+      }
+      
+      if (target === "chroma") {
+        const { migrateChroma } = await import("./migrate.js");
+        const store = getStore();
+        await migrateChroma(dbPath, "chroma_import", store);
+        closeDb();
+      } else if (target === "openclaw") {
+        try {
+          const { execSync } = await import("child_process");
+          const isMac = process.platform === "darwin";
+          const sedOpts = isMac ? "-i ''" : "-i";
+          
+          console.log(`🦞 Migrating OpenCLAW integration from QMD to KINDX in ${dbPath}...`);
+          
+          // Rename files and directories matching "qmd"
+          execSync(`find . -depth -name '*qmd*' -execdir bash -c 'mv "$1" "\${1//qmd/kindx}"' _ {} \\;`, { cwd: dbPath, stdio: "inherit" });
+          
+          console.log("Updating internal references, configuration schemas, and executable commands...");
+          // Replace references within matched files
+          const replacements = [
+            `find src test -type f -exec sed ${sedOpts} 's/qmd/kindx/g' {} +`,
+            `find src test -type f -exec sed ${sedOpts} 's/Qmd/Kindx/g' {} +`,
+            `find src test -type f -exec sed ${sedOpts} 's/QMD/KINDX/g' {} +`
+          ];
+          
+          const env = { ...process.env, LC_ALL: "C" };
+          for (const cmd of replacements) {
+            try {
+              execSync(cmd, { cwd: dbPath, env, stdio: "ignore" });
+            } catch (err) {
+              // Ignore errors if find fails to match any files on certain passes or if sed complains
+            }
+          }
+          console.log("✅ Migration complete. Please run 'npm run build' inside OpenCLAW to verify.");
+        } catch (err) {
+          console.error("Migration failed:", err);
+          process.exit(1);
+        }
+      } else {
+        console.error(`Unknown migration target: ${target}`);
+        console.error("Usage: kindx migrate <chroma|openclaw> <path>");
+        process.exit(1);
+      }
+      break;
+    }
+
+    case "skill": {
+      const subcommand = cli.args[0];
+      if (subcommand === "install") {
+        installSkill();
+      } else {
+        console.error("Usage: kindx skill install");
+        process.exit(1);
+      }
+      break;
+    }
+
+    case "watch": {
+      const { WatchDaemon } = await import("./watcher.js");
+      const store = getStore();
+      const daemon = new WatchDaemon(store);
+      
+      // Let it handle graceful shutdown
+      process.on("SIGINT", async () => {
+        console.log("\nGot SIGINT, stopping watcher...");
+        await daemon.stop();
+        closeDb();
+        process.exit(0);
+      });
+      process.on("SIGTERM", async () => {
+        console.log("\nGot SIGTERM, stopping watcher...");
+        await daemon.stop();
+        closeDb();
+        process.exit(0);
+      });
+
+      // User can pass specific collections: `kindx watch notes brain`
+      await daemon.start(cli.args.length > 0 ? cli.args : undefined);
+      
+      // Keep process alive indefinitely
+      await new Promise(() => {});
+      break;
+    }
+
     case "update": {
       const collFilter = cli.values.collection as string | undefined;
       await updateCollections(collFilter);
@@ -2920,9 +3011,11 @@ if (isMain) {
           const logPath = resolve(cacheDir, "mcp.log");
           const logFd = openSync(logPath, "w"); // truncate — fresh log per daemon run
           const selfPath = fileURLToPath(import.meta.url);
+          const iName = cli.values.index as string | undefined;
+          const indexFlag = iName ? ["--index", iName] : [];
           const spawnArgs = selfPath.endsWith(".ts")
-            ? ["--import", pathJoin(dirname(selfPath), "..", "node_modules", "tsx", "dist", "esm", "index.mjs"), selfPath, "mcp", "--http", "--port", String(port)]
-            : [selfPath, "mcp", "--http", "--port", String(port)];
+            ? ["--import", pathJoin(dirname(selfPath), "..", "node_modules", "tsx", "dist", "esm", "index.mjs"), selfPath, "mcp", "--http", "--port", String(port), ...indexFlag]
+            : [selfPath, "mcp", "--http", "--port", String(port), ...indexFlag];
           const child = nodeSpawn(process.execPath, spawnArgs, {
             stdio: ["ignore", logFd, logFd],
             detached: true,
@@ -2936,13 +3029,13 @@ if (isMain) {
           process.exit(0);
         }
 
-        // Foreground HTTP mode — remove top-level cursor handlers so the
+        // foreground HTTP mode — remove top-level cursor handlers so the
         // async cleanup handlers in startMcpHttpServer actually run.
         process.removeAllListeners("SIGTERM");
         process.removeAllListeners("SIGINT");
         const { startMcpHttpServer } = await import("./protocol.js");
         try {
-          await startMcpHttpServer(port);
+          await startMcpHttpServer(port, { dbPath: storeDbPathOverride });
         } catch (e: any) {
           if (e?.code === "EADDRINUSE") {
             console.error(`Port ${port} already in use. Try a different port with --port.`);
@@ -2953,7 +3046,7 @@ if (isMain) {
       } else {
         // Default: stdio transport
         const { startMcpServer } = await import("./protocol.js");
-        await startMcpServer();
+        await startMcpServer(storeDbPathOverride);
       }
       break;
     }
@@ -2994,7 +3087,7 @@ if (isMain) {
   }
 
   if (cli.command !== "mcp") {
-    await disposeDefaultLlamaCpp();
+    await disposeDefaultLLM();
     process.exit(0);
   }
 

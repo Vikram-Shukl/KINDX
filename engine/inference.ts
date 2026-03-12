@@ -14,9 +14,12 @@ import {
   type LlamaEmbeddingContext,
   type Token as LlamaToken,
 } from "node-llama-cpp";
-import { homedir } from "os";
-import { join } from "path";
-import { existsSync, mkdirSync, statSync, unlinkSync, readdirSync, readFileSync, writeFileSync } from "fs";
+import { RemoteLLM } from "./remote-llm.js";
+import { createHash } from "crypto";
+import { existsSync, mkdirSync, statSync, unlinkSync, readdirSync, readFileSync, writeFileSync, promises as fs } from "node:fs";
+import * as os from "node:os";
+import { resolve, join } from "path";
+import { homedir } from "node:os";
 
 // =============================================================================
 // Embedding Formatting Functions
@@ -194,8 +197,8 @@ export type RerankDocument = {
 // Format: hf:<user>/<repo>/<file>
 // Override via KINDX_EMBED_MODEL env var (e.g. hf:Qwen/Qwen3-Embedding-0.6B-GGUF/qwen3-embedding-0.6b-q8_0.gguf)
 const DEFAULT_EMBED_MODEL = process.env.KINDX_EMBED_MODEL ?? "hf:ggml-org/embeddinggemma-300M-GGUF/embeddinggemma-300M-Q8_0.gguf";
-const DEFAULT_RERANK_MODEL = process.env.KINDX_RERANK_MODEL ?? "hf:ggml-org/Qwen3-Reranker-0.6B-Q8_0-GGUF/qwen3-reranker-0.6b-q8_0.gguf";
-const DEFAULT_GENERATE_MODEL = process.env.KINDX_GENERATE_MODEL ?? "hf:rr1904/kindx-query-expansion-1.7B-gguf/kindx-query-expansion-1.7B-q4_k_m.gguf";
+const DEFAULT_RERANK_MODEL = process.env.KINDX_RERANK_MODEL ?? "hf:ggml-org/Qwen3-Reranker-0.6B-Q8_0-GGUF/qwen3-reranker-0.6b-Q8_0.gguf";
+const DEFAULT_GENERATE_MODEL = process.env.KINDX_GENERATE_MODEL ?? "hf:LiquidAI/LFM2.5-1.2B-Instruct-GGUF/LFM2.5-1.2B-Instruct-Q4_K_M.gguf";
 
 // Alternative generation models for query expansion:
 // LiquidAI LFM2 - hybrid architecture optimized for edge/on-device inference
@@ -317,6 +320,11 @@ export interface LLM {
   embed(text: string, options?: EmbedOptions): Promise<EmbeddingResult | null>;
 
   /**
+   * Batch get embeddings for text
+   */
+  embedBatch(texts: string[]): Promise<(EmbeddingResult | null)[]>;
+
+  /**
    * Generate text completion
    */
   generate(prompt: string, options?: GenerateOptions): Promise<GenerateResult | null>;
@@ -337,6 +345,27 @@ export interface LLM {
    * Returns list of documents with relevance scores (higher = more relevant)
    */
   rerank(query: string, documents: RerankDocument[], options?: RerankOptions): Promise<RerankResult>;
+
+  /**
+   * Tokenize text into backend-specific tokens (optional, implemented by local models)
+   */
+  tokenize?(text: string): Promise<readonly any[]>;
+
+  /**
+   * Detokenize token IDs back to text (optional)
+   */
+  detokenize?(tokens: readonly any[]): Promise<string>;
+
+  /**
+   * Get device and GPU accelerator info (optional)
+   */
+  getDeviceInfo?(): Promise<{
+    gpu: string | false;
+    gpuOffloading: boolean;
+    gpuDevices: string[];
+    vram?: { total: number; used: number; free: number };
+    cpuCores: number;
+  }>;
 
   /**
    * Dispose of resources
@@ -591,6 +620,13 @@ export class LlamaCpp implements LLM {
       } else if (llama.gpu === false) {
         process.stderr.write(
           "KINDX Warning: no GPU acceleration, running on CPU (slow). Run 'kindx status' for details.\n"
+        );
+      } else if (llama.gpu === "vulkan" && os.release().toLowerCase().includes("microsoft")) {
+        process.stderr.write(
+          "\nKINDX Warning: Vulkan backend detected on WSL2. This is often slow or unstable (using 'dzn').\n" +
+          "For native NVIDIA GPU acceleration on WSL2, please install the CUDA toolkit:\n" +
+          "  sudo apt-get install cuda-toolkit-13-1  (or cuda-toolkit-12-6)\n" +
+          "See https://github.com/ambicuity/KINDX/issues/141 for more details.\n\n"
         );
       }
       this.llama = llama;
@@ -1010,11 +1046,26 @@ export class LlamaCpp implements LLM {
     // Ping activity at start to keep models alive during this operation
     this.touchActivity();
 
-    const llama = await this.ensureLlama();
-    await this.ensureGenerateModel();
-
     const includeLexical = options.includeLexical ?? true;
     const context = options.context;
+
+    // -------------------------------------------------------------------------
+    // Task 2: Dynamic HyDE Bypass
+    // Short entity-lookup queries (≤3 tokens) lack sufficient semantic surface
+    // area for the LLM to extrapolate a meaningful hypothetical document.
+    // Generating HyDE passages for these actively harms precision by shifting
+    // the embedding centroid away from the actual target.
+    // Bypass generation entirely and return direct lex + vec targets.
+    // -------------------------------------------------------------------------
+    const tokenCount = query.trim().split(/\s+/).filter(Boolean).length;
+    if (tokenCount <= 3) {
+      const bypass: Queryable[] = [{ type: 'vec', text: query }];
+      if (includeLexical) bypass.unshift({ type: 'lex', text: query });
+      return bypass;
+    }
+
+    const llama = await this.ensureLlama();
+    await this.ensureGenerateModel();
 
     const grammar = await llama.createGrammar({
       grammar: `
@@ -1027,12 +1078,47 @@ export class LlamaCpp implements LLM {
 
     const prompt = `/no_think Expand this search query: ${query}`;
 
-    // Create a bounded context for expansion to prevent large default VRAM allocations.
+    // -------------------------------------------------------------------------
+    // Task 1: Strict System Prompt Injection
+    // Enforces three constraints on the generation model:
+    //   1. Grammar adherence: output must strictly match the EBNF grammar.
+    //   2. No conversational filler: eliminates "Of course!", apologies, etc.
+    //   3. Domain anchoring: if options.context is provided, inject it so the
+    //      model stays within the bounded knowledge domain and does not
+    //      hallucinate external concepts (e.g., "blockchain" for a code repo).
+    // -------------------------------------------------------------------------
+    const domainInstruction = context
+      ? `Domain context: ${context}\nYour expansions MUST stay within this domain. Do not introduce concepts from outside it.`
+      : `Stay strictly within the semantic domain implied by the query itself.`;
+
+    const systemPrompt = [
+      `You are a search query expansion engine. Your ONLY task is to output structured query variations.`,
+      ``,
+      `OUTPUT FORMAT (strict — do not deviate):`,
+      `  lex: <exact keyword phrase>`,
+      `  vec: <semantically equivalent rephrasing>`,
+      `  hyde: <a verbatim 1-2 sentence excerpt that would appear in a relevant technical document>`,
+      ``,
+      `RULES (violations will break the downstream parser):`,
+      `  - Do NOT write greetings, apologies, explanations, or any prose outside the format.`,
+      `  - Do NOT write "Here is...", "Of course!", "I'd be happy to...", or similar filler.`,
+      `  - Each line MUST start with "lex:", "vec:", or "hyde:" followed by a single space.`,
+      `  - hyde entries MUST read like an excerpt from a technical document, NOT a question or summary.`,
+      `  - Output 2–4 lines maximum. Output NOTHING else.`,
+      ``,
+      domainInstruction,
+    ].join('\n');
+
+    // Create a bounded context for expansion.
+    // The system prompt adds ~400 tokens of overhead. We allocate a 512-token buffer
+    // on top of expandContextSize to prevent native llama.cpp from aborting on context
+    // overflow when the combined system prompt + user query exceeds the window.
+    const SYSTEM_PROMPT_TOKEN_OVERHEAD = 512;
     const genContext = await this.generateModel!.createContext({
-      contextSize: this.expandContextSize,
+      contextSize: this.expandContextSize + SYSTEM_PROMPT_TOKEN_OVERHEAD,
     });
     const sequence = genContext.getSequence();
-    const session = new LlamaChatSession({ contextSequence: sequence });
+    const session = new LlamaChatSession({ contextSequence: sequence, systemPrompt });
 
     try {
       // Qwen3 recommended settings for non-thinking mode:
@@ -1268,11 +1354,11 @@ export class LlamaCpp implements LLM {
  * Coordinates with LlamaCpp idle timeout to prevent disposal during active sessions.
  */
 class LLMSessionManager {
-  private llm: LlamaCpp;
+  private llm: LLM;
   private _activeSessionCount = 0;
   private _inFlightOperations = 0;
 
-  constructor(llm: LlamaCpp) {
+  constructor(llm: LLM) {
     this.llm = llm;
   }
 
@@ -1308,7 +1394,7 @@ class LLMSessionManager {
     this._inFlightOperations = Math.max(0, this._inFlightOperations - 1);
   }
 
-  getLlamaCpp(): LlamaCpp {
+  getLLM(): LLM {
     return this.llm;
   }
 }
@@ -1411,18 +1497,18 @@ class LLMSession implements ILLMSession {
   }
 
   async embed(text: string, options?: EmbedOptions): Promise<EmbeddingResult | null> {
-    return this.withOperation(() => this.manager.getLlamaCpp().embed(text, options));
+    return this.withOperation(() => this.manager.getLLM().embed(text, options));
   }
 
   async embedBatch(texts: string[]): Promise<(EmbeddingResult | null)[]> {
-    return this.withOperation(() => this.manager.getLlamaCpp().embedBatch(texts));
+    return this.withOperation(() => this.manager.getLLM().embedBatch(texts));
   }
 
   async expandQuery(
     query: string,
     options?: { context?: string; includeLexical?: boolean }
   ): Promise<Queryable[]> {
-    return this.withOperation(() => this.manager.getLlamaCpp().expandQuery(query, options));
+    return this.withOperation(() => this.manager.getLLM().expandQuery(query, options));
   }
 
   async rerank(
@@ -1430,19 +1516,19 @@ class LLMSession implements ILLMSession {
     documents: RerankDocument[],
     options?: RerankOptions
   ): Promise<RerankResult> {
-    return this.withOperation(() => this.manager.getLlamaCpp().rerank(query, documents, options));
+    return this.withOperation(() => this.manager.getLLM().rerank(query, documents, options));
   }
 }
 
-// Session manager for the default LlamaCpp instance
+// Session manager for the default LLM instance
 let defaultSessionManager: LLMSessionManager | null = null;
 
 /**
- * Get the session manager for the default LlamaCpp instance.
+ * Get the session manager for the default LLM instance.
  */
 function getSessionManager(): LLMSessionManager {
-  const llm = getDefaultLlamaCpp();
-  if (!defaultSessionManager || defaultSessionManager.getLlamaCpp() !== llm) {
+  const llm = getDefaultLLM();
+  if (!defaultSessionManager || defaultSessionManager.getLLM() !== llm) {
     defaultSessionManager = new LLMSessionManager(llm);
   }
   return defaultSessionManager;
@@ -1486,36 +1572,40 @@ export function canUnloadLLM(): boolean {
 }
 
 // =============================================================================
-// Singleton for default LlamaCpp instance
+// Singleton for default LLM instance
 // =============================================================================
 
-let defaultLlamaCpp: LlamaCpp | null = null;
+let defaultLLM: LLM | null = null;
 
 /**
- * Get the default LlamaCpp instance (creates one if needed)
+ * Get the default LLM instance (creates one if needed)
  */
-export function getDefaultLlamaCpp(): LlamaCpp {
-  if (!defaultLlamaCpp) {
-    const embedModel = process.env.KINDX_EMBED_MODEL;
-    defaultLlamaCpp = new LlamaCpp(embedModel ? { embedModel } : {});
+export function getDefaultLLM(): LLM {
+  if (!defaultLLM) {
+    if (process.env.KINDX_LLM_BACKEND === "remote") {
+      defaultLLM = new RemoteLLM();
+    } else {
+      const embedModel = process.env.KINDX_EMBED_MODEL;
+      defaultLLM = new LlamaCpp(embedModel ? { embedModel } : {});
+    }
   }
-  return defaultLlamaCpp;
+  return defaultLLM;
 }
 
 /**
- * Set a custom default LlamaCpp instance (useful for testing)
+ * Set a custom default LLM instance (useful for testing)
  */
-export function setDefaultLlamaCpp(llm: LlamaCpp | null): void {
-  defaultLlamaCpp = llm;
+export function setDefaultLLM(llm: LLM | null): void {
+  defaultLLM = llm;
 }
 
 /**
- * Dispose the default LlamaCpp instance if it exists.
+ * Dispose the default LLM instance if it exists.
  * Call this before process exit to prevent NAPI crashes.
  */
-export async function disposeDefaultLlamaCpp(): Promise<void> {
-  if (defaultLlamaCpp) {
-    await defaultLlamaCpp.dispose();
-    defaultLlamaCpp = null;
+export async function disposeDefaultLLM(): Promise<void> {
+  if (defaultLLM) {
+    await defaultLLM.dispose();
+    defaultLLM = null;
   }
 }

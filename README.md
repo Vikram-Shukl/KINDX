@@ -24,6 +24,23 @@ KINDX combines BM25 full-text retrieval, vector semantic retrieval, and LLM re-r
 
 ---
 
+## Why KINDX?
+
+The local RAG ecosystem is fragmenting: LanceDB is moving to multimodal ML infrastructure, Chroma is moving to managed cloud, Orama is moving to the browser. **KINDX is the only tool that stays on the desktop and speaks the agent's native language.**
+
+| Capability | KINDX | LanceDB | Chroma | Orama | Khoj |
+|---|:---:|:---:|:---:|:---:|:---:|
+| **Local-first / Air-gapped** | ✅ | ✅ | ❌ | ✅ | ✅ |
+| **MCP Server (agent protocol)** | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **On-device GGUF inference** | ✅ | ❌ | ❌ | ❌ | Partial |
+| **Hybrid BM25 + Vector + Rerank** | ✅ | Partial | Partial | ✅ | ❌ |
+| **Structured agent output (JSON/CSV/XML)** | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **CLI-first / `child_process` invocable** | ✅ | ❌ | ❌ | ❌ | ❌ |
+
+KINDX is the only product in this category that combines local-first privacy, first-class MCP support, on-device GGUF inference, structured pipeline output, and CLI invocability — making it the ideal Memory Node for MCP-compatible autonomous agents (Claude Code, Cursor, Continue.dev, AutoGPT, and beyond).
+
+---
+
 ## The Three Pillars
 
 ### 1. Deterministic Privacy
@@ -83,6 +100,8 @@ kindx search "API" -c notes
 
 # Export full match set for agent pipeline
 kindx search "API" --all --files --min-score 0.3
+
+> **Pro-tip (Small Collections):** For collections under ~100 documents, `kindx search` (BM25) is incredibly fast and often sufficient. The query expansion and reranking overhead of `kindx query` is best suited for larger, noisier corporate datasets.
 ```
 
 ---
@@ -300,6 +319,19 @@ The `query` command uses Reciprocal Rank Fusion (RRF) with position-aware blendi
 brew install sqlite
 ```
 
+### WSL2 GPU Support (Windows)
+
+If you are running KINDX inside WSL2 with an NVIDIA GPU, `node-llama-cpp` might fall back to the slow, non-conformant Vulkan translation layer (`dzn`) causing `vsearch` and `query` to take 60-90 seconds or crash.
+
+To enable native CUDA GPU acceleration, install the CUDA toolkit runtime libraries (do *not* install the driver meta-packages, WSL2 passes the driver through from Windows):
+
+```bash
+wget https://developer.download.nvidia.com/compute/cuda/repos/wsl-ubuntu/x86_64/cuda-keyring_1.1-1_all.deb
+sudo dpkg -i cuda-keyring_1.1-1_all.deb
+sudo apt-get update
+sudo apt-get install cuda-toolkit-13-1  # or cuda-toolkit-12-6
+```
+
 ### GGUF Models (via node-llama-cpp)
 
 KINDX uses three local GGUF models (auto-downloaded on first use):
@@ -318,7 +350,7 @@ Override the default embedding model via the `KINDX_EMBED_MODEL` environment var
 
 ```bash
 # Use Qwen3-Embedding-0.6B for multilingual corpus (CJK) support
-export KINDX_EMBED_MODEL="hf:Qwen/Qwen3-Embedding-0.6B-GGUF/qwen3-embedding-0.6b-q8_0.gguf"
+export KINDX_EMBED_MODEL="hf:Qwen/Qwen3-Embedding-0.6B-GGUF/qwen3-embedding-0.6b-Q8_0.gguf"
 
 # Force re-embed all documents after model switch
 kindx embed -f
@@ -352,7 +384,46 @@ npm install
 npm link
 ```
 
----
+### Troubleshooting: Permission Errors (`EACCES`)
+
+If you see `npm error code EACCES` when running `npm install -g`, your system npm is configured to write to a directory owned by root (e.g. `/usr/local/lib/node_modules`). **Do not use `sudo npm install -g`** — this is a security risk.
+
+The recommended fix is to use a Node version manager so that npm writes to a user-owned prefix:
+
+**Option 1 — `nvm` (most common)**
+
+```bash
+# Install nvm
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.2/install.sh | bash
+# Restart your shell, then:
+nvm install --lts
+nvm use --lts
+npm install -g @ambicuity/kindx
+```
+
+**Option 2 — `mise` (polyglot version manager)**
+
+```bash
+# Install mise
+curl https://mise.run | sh
+# Restart your shell, then:
+mise use -g node@lts
+npm install -g @ambicuity/kindx
+```
+
+**Option 3 — configure a user-writable npm prefix**
+
+```bash
+mkdir -p ~/.npm-global
+npm config set prefix ~/.npm-global
+# Add to your shell profile (~/.zshrc or ~/.bashrc):
+export PATH="$HOME/.npm-global/bin:$PATH"
+# Then:
+npm install -g @ambicuity/kindx
+```
+
+After any of the above, `kindx --version` should print the installed version.
+
 
 ## Usage Reference
 
@@ -568,6 +639,12 @@ erDiagram
 | `KINDX_CONFIG_DIR` | `~/.config/kindx` | Configuration directory override |
 | `XDG_CACHE_HOME` | `~/.cache` | Cache base directory |
 | `NO_COLOR` | (unset) | Disable ANSI terminal colors |
+| `KINDX_LLM_BACKEND` | `local` | Set to `remote` to use an OpenAI-compatible API instead of local GPU |
+| `KINDX_OPENAI_BASE_URL` | `http://127.0.0.1:11434/v1` | URL for the Remote API backend (e.g. Ollama, LM Studio) |
+| `KINDX_OPENAI_API_KEY` | (unset) | API key for the Remote API backend if required |
+| `KINDX_OPENAI_EMBED_MODEL`| `nomic-embed-text` | Model name to pass for `/v1/embeddings` |
+| `KINDX_OPENAI_GENERATE_MODEL` | `llama3.2` | Model name to pass for `/v1/chat/completions` (query expansion) |
+| `KINDX_OPENAI_RERANK_MODEL` | (unset) | Model name to pass for `/v1/rerank` (if supported by backend) |
 
 ---
 
