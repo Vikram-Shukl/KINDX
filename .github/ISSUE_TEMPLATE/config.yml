@@ -1,5 +1,8 @@
 blank_issues_enabled: false
 contact_links:
+  - name: Contribution Workflow and Label Taxonomy
+    url: https://github.com/ambicuity/KINDX/blob/main/.github/LABEL_TAXONOMY.md
+    about: See the maintainer taxonomy, difficulty tiers, and labeling guidance used by the redesigned templates.
   - name: Questions and General Discussion
     url: https://github.com/ambicuity/KINDX/discussions
     about: Ask questions, share ideas, or discuss KINDX in our community forum.

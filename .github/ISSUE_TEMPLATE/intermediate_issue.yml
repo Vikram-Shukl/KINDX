@@ -1,0 +1,176 @@
+name: Intermediate Issue
+description: Propose a contributor-ready task that spans multiple files or requires stronger codebase familiarity
+title: "Intermediate Issue: "
+labels: ["help wanted", "triage"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This template is for contributor-ready work that spans multiple files, requires stronger technical context, or asks the contributor to reason across one or two subsystems.
+
+        Intermediate issues should have a clear destination and clear constraints, but the contributor is expected to decide how to get there within the repository's existing patterns.
+
+        ## Contributor Profile
+
+        This issue type is intended for contributors who are already comfortable navigating KINDX and its contribution workflow.
+
+        Contributors should be comfortable:
+        - tracing behavior across CLI, catalog, repository, or test files
+        - making a bounded implementation decision without a detailed recipe
+        - extending automated coverage and validating edge cases
+        - understanding how one change may affect adjacent commands or workflows
+
+        > [!IMPORTANT]
+        > Please coordinate ownership before starting by commenting `/assign`.
+        > Intermediate issues are large enough that overlapping work is costly.
+        >
+        > When implementation starts, comment `/working` so maintainers can see the issue is actively in progress.
+
+        > [!NOTE]
+        > Typical scope: a focused improvement across multiple files in one subsystem or across two closely related subsystems.
+        >
+        > Typical effort: roughly 4 to 8 hours, depending on test coverage and review feedback.
+        >
+        > If you want a plan grounded in the current codebase before coding, comment `@coderabbitai plan` on the issue.
+
+        ## Good Fit
+
+        - a medium-sized CLI or configuration enhancement
+        - validation or diagnostics work with clear requirements
+        - CI and packaging improvements with a defined target behavior
+        - work that requires understanding 2 to 3 existing code paths
+
+        ## Not a Good Fit
+
+        - a starter task with an obvious implementation recipe
+        - an architecture change that still needs design alignment
+        - a broad refactor with unclear boundaries
+
+  - type: dropdown
+    id: type
+    attributes:
+      label: Type
+      options:
+        - Feature work
+        - Behavioral enhancement
+        - Configuration improvement
+        - Tooling / CI
+        - Testing infrastructure
+        - Documentation and developer experience
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - CLI interface and commands
+        - Configuration and YAML catalogs
+        - Indexing and collection management
+        - Search and retrieval
+        - MCP server and HTTP transport
+        - Remote backend and model integration
+        - Packaging and install workflows
+        - Testing infrastructure
+        - CI/CD and automation
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: difficulty
+    attributes:
+      label: Difficulty
+      options:
+        - Intermediate
+    validations:
+      required: true
+
+  - type: dropdown
+    id: maintainer_guidance_needed
+    attributes:
+      label: Maintainer Guidance Needed
+      options:
+        - Low
+        - Medium
+        - High
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Describe the technical or workflow gap with enough context for someone familiar with the repo to understand the problem immediately.
+    validations:
+      required: true
+
+  - type: textarea
+    id: why_it_matters
+    attributes:
+      label: Why It Matters
+      description: Explain the maintainer, contributor, or user impact.
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: Describe the expected implementation boundaries, constraints, and any important design guardrails.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance Criteria
+      description: Provide a concrete completion checklist with user-visible outcomes, edge cases, and verification expectations.
+    validations:
+      required: true
+
+  - type: textarea
+    id: relevant_files
+    attributes:
+      label: Relevant Files
+      description: List the primary code, test, and doc files to inspect.
+    validations:
+      required: true
+
+  - type: textarea
+    id: testing
+    attributes:
+      label: Testing
+      description: Explain the expected automated and manual verification steps. Include commands and notable environment assumptions when relevant.
+    validations:
+      required: true
+
+  - type: textarea
+    id: non_goals
+    attributes:
+      label: Non-goals
+      description: Call out adjacent work that should not be bundled into this issue.
+    validations:
+      required: true
+
+  - type: textarea
+    id: difficulty_rationale
+    attributes:
+      label: Difficulty Rationale
+      description: Explain why this requires intermediate repo familiarity rather than a first- or second-contribution task.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Maintainer Checklist
+      options:
+        - label: I searched open and recently closed issues to confirm this is not a duplicate.
+          required: true
+        - label: I identified the main files, tests, and edge cases the contributor should cover.
+          required: true
+        - label: I verified the issue is contributor-ready and does not require a separate architecture proposal first.
+          required: true

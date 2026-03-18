@@ -53,13 +53,38 @@ If you're looking for where things live:
 
 ## 2. Finding Something to Work On
 
-We organize work into clear categories using issue labels:
+We organize intake around contributor difficulty and professional issue types:
 
-- [`good first issue`](https://github.com/ambicuity/KINDX/labels/good%20first%20issue) — Small, scoped tasks perfect for your first contribution.
-- [`help wanted`](https://github.com/ambicuity/KINDX/labels/help%20wanted) — Medium-complexity tasks. Don't hesitate to ask for guidance!
-- **Architecture Proposals** — Thinking about structural changes to the core retrieval pipeline? We'd love to hear your ideas! Please [open an issue](https://github.com/ambicuity/KINDX/issues/new/choose) to discuss the approach before writing code to ensure we're aligned.
+- [`good first issue`](https://github.com/ambicuity/KINDX/labels/good%20first%20issue) — Small, scoped tasks perfect for a first contribution.
+- [`help wanted`](https://github.com/ambicuity/KINDX/labels/help%20wanted) — Contributor-ready work across our `Beginner`, `Intermediate`, and `Advanced` issue templates.
+- **Bug, documentation, feature, performance, architecture, and epic templates** — Use the appropriate issue form when reporting a problem or proposing work.
+- **Architecture Proposals** — Thinking about structural changes to the core retrieval pipeline? Please [open an issue](https://github.com/ambicuity/KINDX/issues/new/choose) before writing code so we can align on design first.
 
-Feel free to comment `/assign` on any unassigned issue to let others know you're working on it.
+The contributor difficulty ladder is intentionally explicit:
+
+- **Good First Issue** — A guided, low-risk change with a clear starting point and a small verification step.
+- **Beginner Issue** — A task for contributors who can work more independently, read existing patterns, and make a small implementation decision.
+- **Intermediate Issue** — A cross-file task that requires familiarity with KINDX's workflows and stronger technical judgment.
+- **Advanced Issue** — High-context, higher-risk work that should be coordinated with a maintainer before coding begins.
+
+Maintainers track more detailed `type/*`, `area/*`, `difficulty/*`, and `status/*` labels internally. See [.github/LABEL_TAXONOMY.md](./.github/LABEL_TAXONOMY.md) for the taxonomy that pairs with the redesigned templates.
+
+If an issue is unassigned, feel free to comment `/assign` before you start. When you begin implementation, comment `/working` so the issue is marked as in progress. That helps us coordinate ownership, keep contributor-ready issues available, and avoid duplicate work.
+
+### Useful Issue and Review Commands
+
+- On issues:
+  - `/assign` claims an unassigned issue for you
+  - `/working` claims the issue for you if needed and marks it `status/in-progress`
+  - `/unassign` removes you from the assignee list
+  - `/done` removes you from the assignee list and clears `status/in-progress` when nobody else is assigned
+  - `@coderabbitai plan` asks CodeRabbit to generate an implementation plan on the issue
+- On pull requests:
+  - `@coderabbitai review` requests an incremental review
+  - `@coderabbitai full review` requests a full review from scratch
+  - `@coderabbitai summary` refreshes the high-level PR summary
+
+CodeRabbit issue enrichment and manual issue planning are explicitly enabled in [.coderabbit.yaml](./.coderabbit.yaml). GitHub coding agents can also be assigned directly from the issue sidebar when available for the repository.
 
 ---
 

@@ -1,5 +1,5 @@
 name: Architecture Proposal
-description: Propose a significant architectural change to KINDX
+description: Propose a design-complete architectural change that affects multiple KINDX subsystems
 title: "arch: "
 labels: ["architecture", "discussion"]
 assignees: ["ambicuity"]
@@ -7,22 +7,81 @@ body:
   - type: markdown
     attributes:
       value: |
-        Architecture proposals are for significant structural changes that affect multiple components.
-        Please discuss the proposal here before writing any code.
+        Architecture proposals are for significant structural changes that affect multiple components, public behavior, or maintainer operating model.
 
-  - type: textarea
-    id: summary
+        The goal is to make the design decision-complete enough that implementation can begin after approval.
+
+  - type: dropdown
+    id: type
     attributes:
-      label: Summary
-      description: A brief, one-paragraph summary of the proposed change.
+      label: Type
+      options:
+        - Architecture proposal
+        - Cross-cutting refactor
+        - New subsystem
+        - Public interface redesign
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Search and retrieval
+        - CLI interface and commands
+        - Configuration and YAML catalogs
+        - MCP server and HTTP transport
+        - Remote backend and model integration
+        - Packaging and install workflows
+        - Testing infrastructure
+        - CI/CD and automation
+        - Cross-cutting / multiple subsystems
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: difficulty
+    attributes:
+      label: Difficulty
+      options:
+        - Advanced
+        - Epic-scale
+    validations:
+      required: true
+
+  - type: dropdown
+    id: maintainer_guidance_needed
+    attributes:
+      label: Maintainer Guidance Needed
+      options:
+        - Medium
+        - High
     validations:
       required: true
 
   - type: textarea
-    id: motivation
+    id: problem
     attributes:
-      label: Motivation
-      description: Why is this change needed? What problem does it solve?
+      label: Problem
+      description: Describe the architectural gap or scaling limit being addressed.
+    validations:
+      required: true
+
+  - type: textarea
+    id: why_it_matters
+    attributes:
+      label: Why It Matters
+      description: Explain the expected product, maintainer, or operational value.
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: Define the intended boundaries, impacted surfaces, and what is explicitly out of scope.
     validations:
       required: true
 
@@ -30,7 +89,47 @@ body:
     id: design
     attributes:
       label: Proposed Design
-      description: Describe the technical design in detail. Include affected files, data flow changes, and API changes.
+      description: Describe the technical design in detail. Include data flow, interfaces, affected files, and migration expectations.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance Criteria
+      description: List the concrete conditions that must hold before implementation is considered complete.
+    validations:
+      required: true
+
+  - type: textarea
+    id: relevant_files
+    attributes:
+      label: Relevant Files
+      description: List the primary implementation, spec, and documentation files involved.
+    validations:
+      required: true
+
+  - type: textarea
+    id: testing
+    attributes:
+      label: Testing and Validation
+      description: Describe how the design should be validated, benchmarked, or rolled out safely.
+    validations:
+      required: true
+
+  - type: textarea
+    id: non_goals
+    attributes:
+      label: Non-goals
+      description: Identify adjacent changes that should not be part of this proposal.
+    validations:
+      required: true
+
+  - type: textarea
+    id: difficulty_rationale
+    attributes:
+      label: Difficulty Rationale
+      description: Explain the cross-cutting complexity or review burden.
     validations:
       required: true
 
@@ -51,9 +150,11 @@ body:
   - type: checkboxes
     id: checklist
     attributes:
-      label: Pre-submission Checklist
+      label: Proposal Checklist
       options:
-        - label: I have searched existing proposals to ensure this is not a duplicate.
+        - label: I have searched open and recently closed issues, epics, and proposals to ensure this is not a duplicate.
           required: true
         - label: I understand this requires maintainer approval before implementation.
+          required: true
+        - label: I documented scope boundaries, validation strategy, and non-goals.
           required: true

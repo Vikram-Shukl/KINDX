@@ -1,64 +1,138 @@
 name: Documentation
-description: Report missing, incorrect, or unclear documentation
+description: Propose a documentation improvement with clear scope and verification steps
 title: "docs: "
-labels: ["documentation"]
+labels: ["documentation", "triage"]
 assignees: []
 body:
   - type: markdown
     attributes:
       value: |
-        Use this template for documentation gaps, inaccuracies, or improvement suggestions — README, CLI help text, CONTRIBUTING guide, inline code comments, or API reference.
+        Use this template for documentation gaps, inaccuracies, tutorials, maintainer guides, or contributor experience improvements.
 
-  - type: textarea
-    id: description
+  - type: dropdown
+    id: type
     attributes:
-      label: Documentation Issue
-      description: Describe what is missing, incorrect, or unclear.
-      placeholder: "The README does not document the `--explain` flag for `kindx query`."
+      label: Type
+      options:
+        - Missing documentation
+        - Incorrect or outdated documentation
+        - Developer-experience documentation
+        - Contributor workflow documentation
+        - Reference or tutorial improvement
     validations:
       required: true
 
   - type: dropdown
-    id: doc-type
+    id: area
     attributes:
-      label: Documentation Type
-      description: Which documentation area is affected?
+      label: Area
       options:
-        - "README.md"
-        - "CONTRIBUTING.md"
-        - "CLI help text (--help)"
-        - "Inline code comments"
-        - "CHANGELOG.md"
-        - "MCP tool descriptions"
-        - "Architecture / design docs"
-        - "SECURITY.md"
-        - "Other"
+        - README.md
+        - CONTRIBUTING.md
+        - CLI help text
+        - MCP tool descriptions
+        - Reference docs
+        - GitHub templates and maintainer docs
+        - CI/CD and release docs
+        - Other
     validations:
       required: true
 
   - type: dropdown
-    id: issue-type
+    id: difficulty
     attributes:
-      label: Issue Type
+      label: Difficulty
       options:
-        - "Missing documentation"
-        - "Incorrect / outdated information"
-        - "Unclear or confusing wording"
-        - "Missing examples or code snippets"
-        - "Typo or formatting error"
+        - Good first issue
+        - Beginner
+        - Intermediate
+        - Advanced
+    validations:
+      required: true
+
+  - type: dropdown
+    id: maintainer_guidance_needed
+    attributes:
+      label: Maintainer Guidance Needed
+      options:
+        - Low
+        - Medium
+        - High
     validations:
       required: true
 
   - type: textarea
-    id: proposed-change
+    id: problem
     attributes:
-      label: Proposed Change
-      description: If you have a specific correction or addition in mind, describe it here.
+      label: Problem
+      description: Describe what is missing, outdated, or confusing.
+      placeholder: "The README does not document `KINDX_MCP_TOKEN`, so operators miss the daemon auth option."
+    validations:
+      required: true
+
+  - type: textarea
+    id: why_it_matters
+    attributes:
+      label: Why It Matters
+      description: Explain the contributor, maintainer, or user impact.
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: Define which docs or examples should change and what should remain out of scope.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance Criteria
+      description: List the concrete outcomes required for completion.
+    validations:
+      required: true
+
+  - type: textarea
+    id: relevant_files
+    attributes:
+      label: Relevant Files
+      description: List the docs, code, or tests contributors should inspect.
+    validations:
+      required: true
+
+  - type: textarea
+    id: testing
+    attributes:
+      label: Testing
+      description: Describe how to verify the docs update is correct.
+      placeholder: "Cross-check the docs against the implementation and, if needed, run the referenced CLI command."
+    validations:
+      required: true
+
+  - type: textarea
+    id: non_goals
+    attributes:
+      label: Non-goals
+      description: Call out nearby work that should not be bundled into this issue.
+    validations:
+      required: true
+
+  - type: textarea
+    id: difficulty_rationale
+    attributes:
+      label: Difficulty Rationale
+      description: Explain the expected complexity or repo context required.
+    validations:
+      required: true
 
   - type: checkboxes
     id: checklist
     attributes:
-      label: Pre-submission Checklist
+      label: Reporter Checklist
       options:
-        - label: I have searched existing issues to ensure this is not a duplicate.
+        - label: I have searched open and recently closed issues to ensure this is not a duplicate.
+          required: true
+        - label: I have identified the affected docs and how to verify the update.
           required: true

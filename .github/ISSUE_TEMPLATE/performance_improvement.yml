@@ -1,25 +1,99 @@
 name: Performance Improvement
-description: Report a performance bottleneck or propose an optimization for KINDX
+description: Propose a measured performance improvement with concrete verification targets
 title: "perf: "
-labels: ["performance"]
+labels: ["performance", "triage"]
 assignees: []
 body:
   - type: markdown
     attributes:
       value: |
-        Use this template for performance-related issues — latency regressions, throughput bottlenecks, memory overhead, or cold start problems.
+        Use this template for latency, throughput, memory, cold-start, or operational efficiency improvements.
 
-  - type: textarea
-    id: summary
+        Performance issues should be grounded in measurements or a clear, reproducible verification plan.
+
+  - type: dropdown
+    id: type
     attributes:
-      label: Performance Issue Summary
-      description: Describe the performance problem or optimization opportunity.
-      placeholder: "Vector search latency exceeds 500ms when the index contains more than 50K chunks."
+      label: Type
+      options:
+        - Latency improvement
+        - Throughput improvement
+        - Memory reduction
+        - Cold-start improvement
+        - CI / packaging efficiency
+        - Operational diagnostics
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Model loading / cold start
+        - Embedding and indexing
+        - BM25 / FTS5 search
+        - Vector search
+        - Query expansion
+        - Reranking
+        - MCP server overhead
+        - Database I/O
+        - Packaging and install workflows
+        - CI/CD and automation
+        - Multiple areas
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: difficulty
+    attributes:
+      label: Difficulty
+      options:
+        - Beginner
+        - Intermediate
+        - Advanced
+    validations:
+      required: true
+
+  - type: dropdown
+    id: maintainer_guidance_needed
+    attributes:
+      label: Maintainer Guidance Needed
+      options:
+        - Low
+        - Medium
+        - High
     validations:
       required: true
 
   - type: textarea
-    id: current-metrics
+    id: problem
+    attributes:
+      label: Problem
+      description: Describe the bottleneck or optimization opportunity.
+      placeholder: "The repository has a smoke-install script, but no CI job exercises install/runtime packaging behavior."
+    validations:
+      required: true
+
+  - type: textarea
+    id: why_it_matters
+    attributes:
+      label: Why It Matters
+      description: Explain the user, contributor, or maintainer impact.
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: Define the intended implementation boundaries.
+    validations:
+      required: true
+
+  - type: textarea
+    id: current_metrics
     attributes:
       label: Current Metrics
       description: Provide measured numbers — latency, throughput, memory usage, corpus size. Include how you measured them (e.g., `kindx status`, `time kindx search ...`, profiling tools).
@@ -31,46 +105,55 @@ body:
       required: true
 
   - type: textarea
-    id: target-metrics
+    id: target_metrics
     attributes:
       label: Target Metrics
       description: What performance target should this change achieve?
       placeholder: |
         - `kindx query` on warm daemon: < 1.5s end-to-end
         - Cold start (no daemon): < 2.5s end-to-end
-
-  - type: dropdown
-    id: pipeline-stage
-    attributes:
-      label: Affected Pipeline Stage
-      description: Which part of the KINDX pipeline is the bottleneck?
-      options:
-        - "Model loading / cold start"
-        - "Embedding (kindx embed)"
-        - "BM25 / FTS5 search"
-        - "Vector search (sqlite-vec)"
-        - "Query expansion (LLM)"
-        - "Reranking (LLM)"
-        - "RRF fusion / blending"
-        - "MCP server overhead"
-        - "Database I/O"
-        - "Multiple stages"
-        - "Other"
     validations:
       required: true
 
   - type: textarea
-    id: proposed-optimization
+    id: acceptance_criteria
     attributes:
-      label: Proposed Optimization
-      description: If you have a specific optimization in mind, describe it here. Include affected files and any trade-offs.
+      label: Acceptance Criteria
+      description: List the concrete conditions for completion.
+    validations:
+      required: true
 
   - type: textarea
-    id: profiling-data
+    id: relevant_files
     attributes:
-      label: Profiling Data
-      description: Attach flame graphs, `--prof` output, or other profiling artifacts if available.
-      render: shell
+      label: Relevant Files
+      description: List the main code, workflow, script, and doc files involved.
+    validations:
+      required: true
+
+  - type: textarea
+    id: testing
+    attributes:
+      label: Testing
+      description: Describe the validation steps and measurement method.
+    validations:
+      required: true
+
+  - type: textarea
+    id: non_goals
+    attributes:
+      label: Non-goals
+      description: Identify nearby work that should stay out of scope.
+    validations:
+      required: true
+
+  - type: textarea
+    id: difficulty_rationale
+    attributes:
+      label: Difficulty Rationale
+      description: Explain the expected implementation complexity.
+    validations:
+      required: true
 
   - type: textarea
     id: environment
@@ -90,9 +173,11 @@ body:
   - type: checkboxes
     id: checklist
     attributes:
-      label: Pre-submission Checklist
+      label: Reporter Checklist
       options:
         - label: I have included measured metrics, not just subjective impressions.
           required: true
-        - label: I have searched existing issues to ensure this is not a duplicate.
+        - label: I have searched open and recently closed issues to ensure this is not a duplicate.
+          required: true
+        - label: I have documented the files, testing approach, and explicit non-goals.
           required: true

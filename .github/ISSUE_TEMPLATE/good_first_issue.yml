@@ -1,45 +1,211 @@
 name: Good First Issue
-description: Report or suggest a small, scoped task perfect for a first contribution.
+description: Propose a contributor-ready starter task for a first-time KINDX contributor
 title: "Good First Issue: "
-labels: ["good first issue"]
+labels: ["good first issue", "triage"]
 assignees: []
 body:
   - type: markdown
     attributes:
       value: |
-        Thank you for suggesting a Good First Issue! These issues should be small, scoped tasks perfect for new contributors to KINDX.
-        Please provide clear context and a concrete goal so that someone new to the project can pick it up easily.
+        This template is for contributor-ready starter work in KINDX.
 
-  - type: textarea
-    id: overview
+        A good first issue should be:
+        - concrete and low-risk
+        - possible to complete in a single focused PR
+        - specific enough that a new contributor can start from the files listed below
+        - small enough that it does not require a design discussion first
+
+        ## Contributor Profile
+
+        This issue type is intended for contributors who are new to KINDX or making one of their first open-source contributions.
+
+        Contributors should be able to:
+        - set up the repository locally
+        - run `npm run build` and `npm test`
+        - make a focused change in one part of the codebase
+        - ask for clarification if the issue body is incomplete
+
+        > [!IMPORTANT]
+        > Please claim the issue before starting by commenting `/assign` when the issue is unassigned.
+        > This helps maintainers avoid overlapping work and keep starter issues available.
+        >
+        > When you actively begin implementation, comment `/working` to mark the issue as in progress.
+        >
+        > The issue body should be specific enough that a contributor does not need to design the solution from scratch.
+
+        > [!NOTE]
+        > Typical scope: one focused behavior, documentation gap, or small tooling fix, plus a targeted test or verification step.
+        >
+        > Typical effort: roughly 1 to 3 hours once local setup is complete.
+        >
+        > If you want an AI-generated implementation sketch on the issue itself, comment `@coderabbitai plan`.
+
+        ## Good Fit
+
+        - a missing or incorrect documentation detail
+        - a focused CLI or help-text improvement
+        - a small packaging or tooling fix
+        - a regression test for existing behavior
+
+        ## Not a Good Fit
+
+        - work that spans multiple subsystems
+        - changes that introduce a new feature design
+        - refactors that require deep retrieval-pipeline context
+        - anything that would be hard to review without a separate design conversation
+
+        Maintainers can layer the taxonomy in [.github/LABEL_TAXONOMY.md](https://github.com/ambicuity/KINDX/blob/main/.github/LABEL_TAXONOMY.md) on top of the existing public labels.
+
+  - type: dropdown
+    id: type
     attributes:
-      label: Overview
-      description: Describe the task or issue clearly. Include context on why this needs to be done.
-      placeholder: "e.g., We need to update the error message in the parsing module..."
+      label: Type
+      description: What kind of starter task is this?
+      options:
+        - Documentation
+        - Testing
+        - CLI / UX polish
+        - Repository tooling
+        - Small bug fix
+        - Small enhancement
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which subsystem is most affected?
+      options:
+        - Documentation
+        - CLI interface and commands
+        - Configuration and YAML catalogs
+        - Indexing and collection management
+        - MCP server and HTTP transport
+        - Packaging and install workflows
+        - Testing infrastructure
+        - CI/CD and automation
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: difficulty
+    attributes:
+      label: Difficulty
+      options:
+        - Good first issue
+    validations:
+      required: true
+
+  - type: dropdown
+    id: maintainer_guidance_needed
+    attributes:
+      label: Maintainer Guidance Needed
+      description: How much maintainer support should the contributor expect?
+      options:
+        - Low
+        - Medium
+        - High
     validations:
       required: true
 
   - type: textarea
-    id: requirements
+    id: problem
     attributes:
-      label: Requirements / Expected Outcome
-      description: What exactly needs to be built or fixed? What does success look like?
+      label: Problem
+      description: Describe the gap or rough edge this issue addresses in plain language.
+      placeholder: "The README omits an option that the CLI already supports, so contributors and users do not discover it."
     validations:
       required: true
 
   - type: textarea
-    id: pointers
+    id: why_it_matters
     attributes:
-      label: Helpful Pointers
-      description: Provide any pointers, links to relevant code files, or hints to help a new contributor get started.
-      placeholder: "e.g., You might want to look at `engine/protocol.ts` around line 45."
+      label: Why It Matters
+      description: Explain the user, contributor, or maintainer impact.
+      placeholder: "This removes friction for first-time users and keeps the docs aligned with the shipped behavior."
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: Define the intended implementation boundaries. For a good first issue, it is appropriate to be explicit.
+      placeholder: |
+        In scope:
+        - Update the relevant docs/help text
+        - Add a focused regression test
+
+        Out of scope:
+        - Larger CLI redesign
+        - Follow-on feature work
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance Criteria
+      description: List concrete outcomes that make this issue complete.
+      placeholder: |
+        - [ ] The behavior is documented in the right place
+        - [ ] A focused test or validation step covers the change
+        - [ ] `npm run build` still passes
+    validations:
+      required: true
+
+  - type: textarea
+    id: relevant_files
+    attributes:
+      label: Relevant Files
+      description: Point contributors to the exact files they should inspect first.
+      placeholder: |
+        - `README.md`
+        - `engine/kindx.ts`
+        - `specs/command-line.test.ts`
+    validations:
+      required: true
+
+  - type: textarea
+    id: testing
+    attributes:
+      label: Testing
+      description: Describe how this issue should be verified locally. Prefer the minimum commands needed to validate the change.
+      placeholder: |
+        - Run `npm run build`
+        - Run a focused vitest file if applicable
+        - Manually confirm the documented CLI output
+    validations:
+      required: true
+
+  - type: textarea
+    id: non_goals
+    attributes:
+      label: Non-goals
+      description: Call out adjacent work that should stay out of scope.
+      placeholder: "Do not redesign the whole command or introduce unrelated doc rewrites."
+    validations:
+      required: true
+
+  - type: textarea
+    id: difficulty_rationale
+    attributes:
+      label: Difficulty Rationale
+      description: Explain why a first-time contributor can succeed here without deep repo knowledge.
+      placeholder: "The change touches one small surface area, has clear acceptance criteria, and does not require deep retrieval-pipeline knowledge."
+    validations:
+      required: true
 
   - type: checkboxes
     id: checklist
     attributes:
-      label: Pre-submission Checklist
+      label: Maintainer Checklist
       options:
-        - label: I have verified that this issue is small, scoped, and suitable for a first-time contributor.
+        - label: I searched open and recently closed issues to confirm this is not a duplicate.
           required: true
-        - label: I have searched existing issues to ensure this is not a duplicate.
+        - label: I verified this issue is small, scoped, and realistic for a first contribution.
+          required: true
+        - label: I listed enough files, tests, and non-goals for someone new to KINDX to start confidently.
           required: true

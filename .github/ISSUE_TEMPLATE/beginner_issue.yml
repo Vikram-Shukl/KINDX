@@ -1,0 +1,176 @@
+name: Beginner Issue
+description: Propose a contributor-ready task for someone ready to work more independently
+title: "Beginner Issue: "
+labels: ["help wanted", "triage"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This template is for tasks that are still contributor-friendly but require more repository context than a starter issue.
+
+        Beginner issues should still be single-PR sized, but they should expect the contributor to read existing code, follow established patterns, and make a small implementation decision.
+
+        ## Contributor Profile
+
+        This issue type is a good fit for contributors who have either completed a good first issue in KINDX or have equivalent open-source experience elsewhere.
+
+        Contributors should be comfortable:
+        - reading existing TypeScript code they did not write
+        - tracing behavior across a few related files
+        - extending or writing focused tests
+        - working through small uncertainties without a step-by-step recipe
+
+        > [!IMPORTANT]
+        > Please claim the issue before starting by commenting `/assign` when the issue is unassigned.
+        > The goal is to avoid duplicate work and keep issue ownership clear.
+        >
+        > Once you begin implementation, comment `/working` to move the issue into an in-progress state.
+
+        > [!TIP]
+        > A beginner issue should include enough context to make the destination clear, but it should not prescribe every implementation step.
+        >
+        > Typical effort: roughly 2 to 4 hours once the repository is set up locally.
+        >
+        > If you want a repository-aware implementation sketch before you start, comment `@coderabbitai plan` on the issue.
+
+        ## Good Fit
+
+        - a small behavior improvement following an existing pattern
+        - a focused configuration or CLI enhancement
+        - a documentation improvement that requires code reading for accuracy
+        - a test-driven fix for a narrow edge case
+
+        ## Not a Good Fit
+
+        - a task solvable by editing one obvious line with no investigation
+        - cross-cutting work across multiple subsystems
+        - changes that require a new design or architecture discussion
+
+  - type: dropdown
+    id: type
+    attributes:
+      label: Type
+      options:
+        - Documentation
+        - Testing
+        - CLI / UX enhancement
+        - Configuration improvement
+        - Repository tooling
+        - Small behavior change
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Documentation
+        - CLI interface and commands
+        - Configuration and YAML catalogs
+        - Indexing and collection management
+        - MCP server and HTTP transport
+        - Remote backend and model integration
+        - Packaging and install workflows
+        - Testing infrastructure
+        - CI/CD and automation
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: difficulty
+    attributes:
+      label: Difficulty
+      options:
+        - Beginner
+    validations:
+      required: true
+
+  - type: dropdown
+    id: maintainer_guidance_needed
+    attributes:
+      label: Maintainer Guidance Needed
+      options:
+        - Low
+        - Medium
+        - High
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What is missing, confusing, or inconsistent today? Describe the current state precisely.
+    validations:
+      required: true
+
+  - type: textarea
+    id: why_it_matters
+    attributes:
+      label: Why It Matters
+      description: Why should maintainers prioritize this?
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: Define the intended implementation boundaries and expected deliverable without turning this into a step-by-step tutorial.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance Criteria
+      description: Provide a concrete done-definition.
+    validations:
+      required: true
+
+  - type: textarea
+    id: relevant_files
+    attributes:
+      label: Relevant Files
+      description: List the most relevant code, spec, or doc files contributors should inspect first.
+    validations:
+      required: true
+
+  - type: textarea
+    id: testing
+    attributes:
+      label: Testing
+      description: Explain how the work should be verified, including the exact local commands when possible.
+    validations:
+      required: true
+
+  - type: textarea
+    id: non_goals
+    attributes:
+      label: Non-goals
+      description: Identify nearby work that should stay out of scope.
+    validations:
+      required: true
+
+  - type: textarea
+    id: difficulty_rationale
+    attributes:
+      label: Difficulty Rationale
+      description: Why is this larger than a starter issue but still appropriate for an early contributor working independently?
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Maintainer Checklist
+      options:
+        - label: I searched open and recently closed issues to confirm this is not a duplicate.
+          required: true
+        - label: I scoped this issue so it can land in one focused PR.
+          required: true
+        - label: I included enough implementation context, files, and tests for a contributor to start without a design meeting.
+          required: true

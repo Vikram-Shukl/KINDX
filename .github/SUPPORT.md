@@ -16,6 +16,17 @@ If you need help with KINDX, here are the best ways to get it:
 - **Questions and discussion**: [GitHub Discussions](https://github.com/ambicuity/KINDX/discussions)
 - **Security vulnerabilities**: Email `contact@riteshrana.engineer` (do not open a public issue)
 
+## Helpful Commands
+
+- On issues:
+  - `/assign` to claim an unassigned issue
+  - `/working` to mark an issue as actively in progress
+  - `@coderabbitai plan` to ask CodeRabbit for an implementation plan
+- On pull requests:
+  - `@coderabbitai review` for an incremental review
+  - `@coderabbitai full review` for a fresh full review
+  - `@coderabbitai summary` to refresh the PR summary
+
 ## What NOT to do
 
 - Do not email the maintainer for general support questions -- use GitHub Discussions instead.

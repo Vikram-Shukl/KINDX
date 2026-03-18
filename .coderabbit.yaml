@@ -112,5 +112,13 @@ reviews:
       enabled: true
       timeout_ms: 180000
 
+issue_enrichment:
+  auto_enrich:
+    enabled: true
+  planning:
+    enabled: true
+    auto_planning:
+      enabled: false
+
 chat:
   auto_reply: true

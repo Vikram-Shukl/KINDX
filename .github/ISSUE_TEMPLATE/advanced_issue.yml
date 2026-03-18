@@ -1,0 +1,175 @@
+name: Advanced Issue
+description: Propose a high-context contributor task with cross-cutting technical risk and explicit review boundaries
+title: "Advanced Issue: "
+labels: ["help wanted", "triage"]
+assignees: ["ambicuity"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This template is for complex contributor-ready work that spans multiple subsystems, carries meaningful technical risk, or needs deliberate rollout and review guidance.
+
+        Advanced issues should be implementation-ready, but they should assume the contributor needs broad repository context and a strong testing strategy.
+
+        ## Contributor Profile
+
+        This issue type is intended for contributors who are already very comfortable with KINDX internals and the full contribution workflow.
+
+        Contributors should be comfortable:
+        - reasoning across multiple engine modules and their interactions
+        - modifying behavior that affects CLI, indexing, retrieval, MCP, or runtime diagnostics
+        - strengthening tests, docs, and developer tooling together
+        - identifying rollout risk and calling out tradeoffs in the PR description
+
+        > [!IMPORTANT]
+        > Please coordinate with a maintainer before starting and claim the issue with `/assign`.
+        > Advanced issues are intentionally high-context and should not begin from parallel guesswork.
+        >
+        > Once implementation is underway, comment `/working` so the issue reflects active ownership.
+
+        > [!WARNING]
+        > If the work is still design-incomplete or changes the public architecture materially, use the Architecture Proposal or Epic template instead of this one.
+        >
+        > Typical effort: one to several focused working sessions, depending on verification depth and cross-cutting review needs.
+        >
+        > If you want a repository-aware implementation plan first, comment `@coderabbitai plan` on the issue.
+
+        ## Good Fit
+
+        - diagnostics or reliability work that spans multiple modules
+        - advanced testing-infrastructure improvements
+        - high-impact tooling or runtime behavior improvements with known requirements
+        - contributor-ready work that needs careful review but not a new design process
+
+        ## Not a Good Fit
+
+        - broad roadmap ideas without a settled implementation path
+        - simple issues that only need one file or one obvious fix
+        - proposals that should be debated as architecture before code is written
+
+  - type: dropdown
+    id: type
+    attributes:
+      label: Type
+      options:
+        - Advanced feature work
+        - Cross-cutting refactor
+        - Testing infrastructure
+        - Diagnostics and developer tooling
+        - Runtime reliability improvement
+        - CI/CD and release engineering
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - CLI interface and commands
+        - Configuration and YAML catalogs
+        - Search and retrieval
+        - MCP server and HTTP transport
+        - Remote backend and model integration
+        - Packaging and install workflows
+        - Testing infrastructure
+        - CI/CD and automation
+        - Cross-cutting / multiple subsystems
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: difficulty
+    attributes:
+      label: Difficulty
+      options:
+        - Advanced
+    validations:
+      required: true
+
+  - type: dropdown
+    id: maintainer_guidance_needed
+    attributes:
+      label: Maintainer Guidance Needed
+      options:
+        - Medium
+        - High
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Describe the technical reliability, tooling, or developer-experience gap in enough detail for an experienced contributor to assess the risk.
+    validations:
+      required: true
+
+  - type: textarea
+    id: why_it_matters
+    attributes:
+      label: Why It Matters
+      description: Explain why this is worth the larger implementation and review cost.
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: Define the boundaries, expected design constraints, rollout expectations, and what done includes.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance Criteria
+      description: List concrete conditions that must be true before merge, including safety, compatibility, and test expectations.
+    validations:
+      required: true
+
+  - type: textarea
+    id: relevant_files
+    attributes:
+      label: Relevant Files
+      description: List the most relevant implementation, test, and documentation files.
+    validations:
+      required: true
+
+  - type: textarea
+    id: testing
+    attributes:
+      label: Testing
+      description: Outline the expected verification strategy, including capability checks, platform assumptions, or rollout notes if needed.
+    validations:
+      required: true
+
+  - type: textarea
+    id: non_goals
+    attributes:
+      label: Non-goals
+      description: Identify adjacent work that should stay outside this issue.
+    validations:
+      required: true
+
+  - type: textarea
+    id: difficulty_rationale
+    attributes:
+      label: Difficulty Rationale
+      description: Explain the cross-cutting knowledge, review burden, or implementation risk that makes this advanced.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Maintainer Checklist
+      options:
+        - label: I searched open and recently closed issues to confirm this is not a duplicate.
+          required: true
+        - label: I verified this work is design-complete enough to implement without a separate architecture proposal.
+          required: true
+        - label: I documented the key files, tests, and scope boundaries needed to review this safely.
+          required: true
